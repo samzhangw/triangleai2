@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // 【新】 AI 切換按鈕
     const toggleAIButton = document.getElementById('toggle-ai-button');
     const boardSizeSelect = document.getElementById('board-size-select');
+    // 【新】 連線格數按鈕
+    const lineLengthSelect = document.getElementById('line-length-select');
     // 【已移除】 const maxLineLengthSelect
 
     // 【新】 偵測是否為手機
@@ -65,6 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedDot2 = null;
     // 【新】 遊戲模式狀態
     let isAIBotActive = false;
+    // 【新】 遊戲規則
+    let REQUIRED_LINE_LENGTH = 3; // 預設值
 
     // ----- 輔助函式: 取得標準的線段 ID (相同) -----
     function getLineId(dot1, dot2) {
@@ -83,6 +87,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // 0. 依選單值決定 ROW_LENGTHS
         const sizeValue = (boardSizeSelect && boardSizeSelect.value) ? boardSizeSelect.value : 'medium';
         ROW_LENGTHS = computeRowLengths(sizeValue);
+        
+        // 【新】 依選單值決定 REQUIRED_LINE_LENGTH
+        const lengthValue = (lineLengthSelect && lineLengthSelect.value) ? lineLengthSelect.value : '3';
+        REQUIRED_LINE_LENGTH = parseInt(lengthValue, 10);
 
         // 1. 計算畫布大小 (相同邏輯，但使用動態變數)
         const gridWidth = (Math.max(...ROW_LENGTHS) - 1) * DOT_SPACING_X;
@@ -392,7 +400,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 【邏輯修改】 再次驗證 (雖然 handleCanvasClick 已經擋住，但這是雙重保險)
         if (!isValidPreviewLine(selectedDot1, selectedDot2)) {
-            alert("無效連線！(必須為 3 格且至少包含 1 格虛線)");
+            // 【修改】 動態提示訊息
+            alert(`無效連線！(必須為 ${REQUIRED_LINE_LENGTH} 格且至少包含 1 格虛線)`);
             cancelLine();
             return;
         }
@@ -433,7 +442,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // (此檢查已移至 isValidPreviewLine，但保留 newSegmentDrawn 變數)
         if (!newSegmentDrawn) {
             // 理論上不會執行到這裡，因為 isValidPreviewLine 會擋住
-            alert("無效連線！您必須至少連到一格虛線。");
+            // 【修改】 動態提示訊息
+            alert(`無效連線！您必須至少連到一格虛線。`);
             cancelLine();
             return;
         }
@@ -564,8 +574,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return false; // 找不到線段
         }
 
-        // 2.5. 長度檢查 (固定為 3)
-        const requiredLineLength = 3;
+        // 2.5. 長度檢查 (【修改】 根據設定)
+        const requiredLineLength = REQUIRED_LINE_LENGTH; // 使用全域變數
         if (segmentIds.length !== requiredLineLength) {
             return false; // 不是 3 格
         }
@@ -684,7 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dotA = bestMove.dot1;
                 const dotB = bestMove.dot2;
                 
-                // (AI 的 bestMove 已經由 findAll3GridMoves 和 isValidPreviewLine 驗證過)
+                // (AI 的 bestMove 已經由 findAllValidMoves 和 isValidPreviewLine 驗證過)
                 // (這裡的檢查是保險)
 
                 // 2. 拆解長線為短線 (相同)
@@ -726,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 【邏輯修改】 AI 也必須至少畫到一格新線
                 if (!newSegmentDrawn) {
-                    // AI 的大腦 (findAll3GridMoves) 理論上不該選到這裡
+                    // AI 的大腦 (findAllValidMoves) 理論上不該選到這裡
                     switchPlayer();
                     return;
                 }
@@ -762,7 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 switchPlayer();
 
             } else {
-                // 沒找到任何可走的 3 格線 (AI 必須跳過這回合)
+                // 沒找到任何可走的線 (AI 必須跳過這回合)
                 switchPlayer();
             }
         } catch (error) {
@@ -772,9 +782,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // AI "大腦": 尋找最佳移動（3格連線）
+    // AI "大腦": 尋找最佳移動
     function findBestAIMove() {
-        const allMoves = findAll3GridMoves(); // 此函式現在已遵守新規則
+        // 【修改】 呼叫改名後的函數
+        const allMoves = findAllValidMoves(); // 此函式現在已遵守新規則
         if (allMoves.length === 0) {
             return null; // 沒線可走了
         }
@@ -848,9 +859,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return allMoves[Math.floor(Math.random() * allMoves.length)];
     }
 
-    // 找到所有可能的3格連線（中間有2個點）
-    // 【邏輯修改】
-    function findAll3GridMoves() {
+    // 【修改】 函數改名 (不再是 3 格) 並優化
+    function findAllValidMoves() {
         const moves = [];
         const allDots = dots.flat();
         
@@ -859,23 +869,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dotA = allDots[i];
                 const dotB = allDots[j];
                 
-                // 找到中間所有點
-                const allDotsOnLine = findIntermediateDots(dotA, dotB);
+                // 【優化】
+                // 1. 移除 'allDotsOnLine.length === 4' 的硬編碼檢查
+                // 2. 'isValidPreviewLine' 現在是唯一的驗證來源 (它會檢查角度和 'REQUIRED_LINE_LENGTH')
+                //    (isValidPreviewLine 內部會呼叫 'findIntermediateDots' 1 次)
                 
-                // 檢查是否剛好是3格（4個點，中間2個點）
-                if (allDotsOnLine.length === 4) {
+                if (isValidPreviewLine(dotA, dotB)) {
                     
-                    // 【邏輯修改】 AI 的 "大腦" 直接使用 isValidPreviewLine
-                    // 這樣 AI 和玩家就 100% 遵守相同規則
-                    if (isValidPreviewLine(dotA, dotB)) {
-                        // 如果連線有效，獲取其 segmentIds
-                        const segmentIds = [];
-                        const dotsOnLine = findIntermediateDots(dotA, dotB);
-                        for (let k = 0; k < dotsOnLine.length - 1; k++) {
-                            segmentIds.push(getLineId(dotsOnLine[k], dotsOnLine[k+1]));
-                        }
-                        moves.push({ dot1: dotA, dot2: dotB, segmentIds: segmentIds });
+                    // 驗證通過, 我們需要 segmentIds 來評分
+                    // 呼叫 'findIntermediateDots' (第 2 次, 也是最後 1 次)
+                    const segmentIds = [];
+                    const dotsOnLine = findIntermediateDots(dotA, dotB); 
+                    
+                    for (let k = 0; k < dotsOnLine.length - 1; k++) {
+                        segmentIds.push(getLineId(dotsOnLine[k], dotsOnLine[k+1]));
                     }
+                    moves.push({ dot1: dotA, dot2: dotB, segmentIds: segmentIds });
                 }
             }
         }
@@ -901,6 +910,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // 【新】 監聽棋盤大小變更
     if (boardSizeSelect) {
         boardSizeSelect.addEventListener('change', initGame);
+    }
+    // 【新】 監聽連線格數變更
+    if (lineLengthSelect) {
+        lineLengthSelect.addEventListener('change', initGame);
     }
     // 【已移除】 監聽連線格數限制變更
 
